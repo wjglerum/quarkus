@@ -33,6 +33,9 @@ abstract class AbstractTestHttpAuthenticationMechanism implements HttpAuthentica
     @Inject
     BlockingSecurityExecutor blockingSecurityExecutor;
 
+    @Inject
+    Instance<TestSecurityIdentityAugmentor> testSecurityIdentityAugmentor;
+
     protected volatile String authMechanism = null;
     protected volatile List<Instance<? extends SecurityIdentityAugmentor>> augmentors = null;
 
@@ -47,16 +50,21 @@ abstract class AbstractTestHttpAuthenticationMechanism implements HttpAuthentica
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext event, IdentityProviderManager identityProviderManager) {
         var identity = Uni.createFrom().item(testIdentityAssociation.getTestIdentity());
-        if (augmentors != null && testIdentityAssociation.getTestIdentity() != null) {
-            var requestContext = new AuthenticationRequestContext() {
-                @Override
-                public Uni<SecurityIdentity> runBlocking(Supplier<SecurityIdentity> supplier) {
-                    return blockingSecurityExecutor.executeBlocking(supplier);
+        if (testIdentityAssociation.getTestIdentity() != null) {
+            if (testSecurityIdentityAugmentor.isResolvable()) {
+                identity = identity.map(i -> testSecurityIdentityAugmentor.get().augmentPerRequest(i, event));
+            }
+            if (augmentors != null) {
+                var requestContext = new AuthenticationRequestContext() {
+                    @Override
+                    public Uni<SecurityIdentity> runBlocking(Supplier<SecurityIdentity> supplier) {
+                        return blockingSecurityExecutor.executeBlocking(supplier);
+                    }
+                };
+                var requestAttributes = Map.<String, Object> of(ROUTING_CONTEXT_ATTRIBUTE, event);
+                for (var augmentor : augmentors) {
+                    identity = identity.flatMap(i -> augmentor.get().augment(i, requestContext, requestAttributes));
                 }
-            };
-            var requestAttributes = Map.<String, Object> of(ROUTING_CONTEXT_ATTRIBUTE, event);
-            for (var augmentor : augmentors) {
-                identity = identity.flatMap(i -> augmentor.get().augment(i, requestContext, requestAttributes));
             }
         }
         return identity;

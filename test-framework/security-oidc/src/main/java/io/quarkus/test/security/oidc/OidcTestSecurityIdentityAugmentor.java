@@ -29,6 +29,7 @@ import io.quarkus.test.security.TestSecurityIdentityAugmentor;
 import io.smallrye.jwt.build.Jwt;
 import io.smallrye.jwt.util.KeyUtils;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.RoutingContext;
 
 public class OidcTestSecurityIdentityAugmentor implements TestSecurityIdentityAugmentor {
 
@@ -139,6 +140,16 @@ public class OidcTestSecurityIdentityAugmentor implements TestSecurityIdentityAu
         builder.addAttribute(OidcUtils.CONFIG_METADATA_ATTRIBUTE, new OidcConfigurationMetadata(configMetadataBuilder));
 
         return builder.build();
+    }
+
+    @Override
+    public SecurityIdentity augmentPerRequest(SecurityIdentity identity, RoutingContext routingContext) {
+        if (!identity.isAnonymous()) {
+            // enforces the @AuthenticationContext step-up authentication policy, which is otherwise
+            // only enforced during the OIDC token verification that @TestSecurity bypasses
+            OidcUtils.verifyStepUpAuthenticationPolicy(routingContext, identity);
+        }
+        return identity;
     }
 
     private String generateToken(jakarta.json.JsonObject claims) {
