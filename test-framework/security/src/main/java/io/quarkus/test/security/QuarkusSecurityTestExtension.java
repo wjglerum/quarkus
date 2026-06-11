@@ -118,7 +118,7 @@ public class QuarkusSecurityTestExtension implements QuarkusTestBeforeEachCallba
         }
 
         // run SecurityIdentityAugmentors when:
-        List<Instance<? extends SecurityIdentityAugmentor>> augmentors = new ArrayList<>();
+        List<SecurityIdentityAugmentor> augmentors = new ArrayList<>();
         // 1. user opted-in with @TestSecurity#augmentors, run augmentors listed by user
         for (Class<? extends SecurityIdentityAugmentor> augmentorClass : testSecurity.augmentors()) {
             var augmentorInstance = container.select(augmentorClass);
@@ -129,12 +129,18 @@ public class QuarkusSecurityTestExtension implements QuarkusTestBeforeEachCallba
                         attribute on method '%s' is not available as a CDI bean.
                         """.formatted(augmentorClass, testMethodName));
             }
-            augmentors.add(augmentorInstance);
+            augmentors.add(augmentorInstance.get());
         }
         // 2. @PermissionChecker is used, run the augmentor that enables this functionality
         var quarkusPermissionAugmentor = container.select(QuarkusPermissionSecurityIdentityAugmentor.class);
         if (quarkusPermissionAugmentor.isResolvable()) {
-            augmentors.add(quarkusPermissionAugmentor);
+            augmentors.add(quarkusPermissionAugmentor.get());
+        }
+        // 3. the extension-specific TestSecurityIdentityAugmentor provides augmentors, like the OIDC
+        // one enforcing the @AuthenticationContext step-up authentication policy
+        var testIdentityAugmentor = container.select(TestSecurityIdentityAugmentor.class);
+        if (testIdentityAugmentor.isResolvable()) {
+            augmentors.addAll(testIdentityAugmentor.get().perRequestAugmentors());
         }
         if (!augmentors.isEmpty()) {
             for (var testMechanism : container.select(AbstractTestHttpAuthenticationMechanism.class)) {

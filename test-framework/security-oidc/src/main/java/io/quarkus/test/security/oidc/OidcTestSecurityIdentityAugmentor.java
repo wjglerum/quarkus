@@ -5,9 +5,11 @@ import static io.quarkus.jsonp.JsonProviderHolder.jsonProvider;
 import java.lang.annotation.Annotation;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import jakarta.json.JsonArray;
@@ -23,11 +25,16 @@ import io.quarkus.oidc.OidcConfigurationMetadata;
 import io.quarkus.oidc.common.runtime.OidcConstants;
 import io.quarkus.oidc.runtime.OidcJwtCallerPrincipal;
 import io.quarkus.oidc.runtime.OidcUtils;
+import io.quarkus.oidc.runtime.TokenVerificationResult;
+import io.quarkus.security.identity.AuthenticationRequestContext;
 import io.quarkus.security.identity.SecurityIdentity;
+import io.quarkus.security.identity.SecurityIdentityAugmentor;
 import io.quarkus.security.runtime.QuarkusSecurityIdentity;
 import io.quarkus.test.security.TestSecurityIdentityAugmentor;
+import io.quarkus.vertx.http.runtime.security.HttpSecurityUtils;
 import io.smallrye.jwt.build.Jwt;
 import io.smallrye.jwt.util.KeyUtils;
+import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 
@@ -143,13 +150,54 @@ public class OidcTestSecurityIdentityAugmentor implements TestSecurityIdentityAu
     }
 
     @Override
-    public SecurityIdentity augmentPerRequest(SecurityIdentity identity, RoutingContext routingContext) {
-        if (!identity.isAnonymous()) {
-            // enforces the @AuthenticationContext step-up authentication policy, which is otherwise
-            // only enforced during the OIDC token verification that @TestSecurity bypasses
-            OidcUtils.verifyStepUpAuthenticationPolicy(routingContext, identity);
+    public List<SecurityIdentityAugmentor> perRequestAugmentors() {
+        return List.of(new StepUpAuthenticationPolicyAugmentor());
+    }
+
+    /**
+     * Enforces the {@code @AuthenticationContext} step-up authentication policy, which is otherwise
+     * only enforced during the OIDC token verification that {@code @TestSecurity} bypasses.
+     */
+    private static final class StepUpAuthenticationPolicyAugmentor implements SecurityIdentityAugmentor {
+
+        @Override
+        public Uni<SecurityIdentity> augment(SecurityIdentity identity, AuthenticationRequestContext context) {
+            return Uni.createFrom().item(identity);
         }
-        return identity;
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Uni<SecurityIdentity> augment(SecurityIdentity identity, AuthenticationRequestContext context,
+                Map<String, Object> attributes) {
+            if (identity.isAnonymous()) {
+                return Uni.createFrom().item(identity);
+            }
+            RoutingContext routingContext = HttpSecurityUtils.getRoutingContextAttribute(attributes);
+            if (routingContext == null) {
+                return Uni.createFrom().item(identity);
+            }
+            // the io.quarkus.oidc.runtime.StepUpAuthenticationPolicy stored under this key implements
+            // Consumer<TokenVerificationResult> and throws an AuthenticationFailedException when
+            // the required acr values or the maximum token age are not satisfied by the claims
+            Object policy = routingContext.get("io.quarkus.oidc.runtime.step-up-auth");
+            if (policy != null) {
+                ((Consumer<TokenVerificationResult>) policy).accept(tokenVerificationResult(identity));
+            }
+            return Uni.createFrom().item(identity);
+        }
+
+        private static TokenVerificationResult tokenVerificationResult(SecurityIdentity identity) {
+            io.quarkus.oidc.TokenIntrospection introspection = identity.getAttribute(OidcUtils.INTROSPECTION_ATTRIBUTE);
+            if (introspection != null) {
+                return new TokenVerificationResult(null, introspection);
+            }
+            JsonObject claims = null;
+            AccessTokenCredential accessToken = identity.getCredential(AccessTokenCredential.class);
+            if (accessToken != null && accessToken.getToken() != null) {
+                claims = OidcUtils.decodeJwtContent(accessToken.getToken());
+            }
+            return new TokenVerificationResult(claims != null ? claims : new JsonObject(), null);
+        }
     }
 
     private String generateToken(jakarta.json.JsonObject claims) {

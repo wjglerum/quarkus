@@ -36,13 +36,9 @@ record StepUpAuthenticationPolicy(String[] expectedAcrValues, Long maxAge) imple
     public void accept(TokenVerificationResult t) {
         JsonObject json = t.localVerificationResult() != null ? t.localVerificationResult()
                 : new JsonObject(t.introspectionResult().getIntrospectionString());
-        verify(json);
-    }
-
-    void verify(JsonObject tokenClaims) {
-        verifyAcr(tokenClaims);
+        verifyAcr(json);
         if (maxAge != null) {
-            verifyMaxAge(tokenClaims);
+            verifyMaxAge(json);
         }
     }
 
@@ -114,10 +110,7 @@ record StepUpAuthenticationPolicy(String[] expectedAcrValues, Long maxAge) imple
     }
 
     static StepUpAuthenticationPolicy getFromRequest(TokenAuthenticationRequest request) {
-        return getFromRoutingContext(getRoutingContextAttribute(request));
-    }
-
-    static StepUpAuthenticationPolicy getFromRoutingContext(RoutingContext routingContext) {
+        RoutingContext routingContext = getRoutingContextAttribute(request);
         return routingContext != null ? routingContext.get(AUTHENTICATION_POLICY_KEY) : null;
     }
 

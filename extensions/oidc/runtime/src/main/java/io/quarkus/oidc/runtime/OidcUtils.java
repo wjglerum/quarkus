@@ -154,41 +154,6 @@ public final class OidcUtils {
         return OidcCommonUtils.decodeJwtContent(jwt);
     }
 
-    /**
-     * Verify the token claims of the given security identity against the step-up authentication
-     * policy created for an endpoint annotated with the {@link io.quarkus.oidc.AuthenticationContext}
-     * annotation. This method is a no-op when no policy is stored on the routing context.
-     * <p>
-     * The policy is enforced during the token verification for identities created by this extension;
-     * this method supports test frameworks which create the identity without verifying a token.
-     *
-     * @param routingContext routing context which may carry the step-up authentication policy
-     * @param identity security identity whose token claims are verified
-     * @throws AuthenticationFailedException when the required acr values or the maximum token age
-     *         are not satisfied by the token claims
-     */
-    public static void verifyStepUpAuthenticationPolicy(RoutingContext routingContext, SecurityIdentity identity) {
-        StepUpAuthenticationPolicy policy = StepUpAuthenticationPolicy.getFromRoutingContext(routingContext);
-        if (policy != null) {
-            policy.verify(getTokenClaimsForStepUpPolicy(identity));
-        }
-    }
-
-    private static JsonObject getTokenClaimsForStepUpPolicy(SecurityIdentity identity) {
-        TokenIntrospection introspection = identity.getAttribute(INTROSPECTION_ATTRIBUTE);
-        if (introspection != null) {
-            return new JsonObject(introspection.getIntrospectionString());
-        }
-        AccessTokenCredential accessToken = identity.getCredential(AccessTokenCredential.class);
-        if (accessToken != null && accessToken.getToken() != null) {
-            JsonObject claims = decodeJwtContent(accessToken.getToken());
-            if (claims != null) {
-                return claims;
-            }
-        }
-        return new JsonObject();
-    }
-
     public static String getJwtContentPart(String jwt) {
         return OidcCommonUtils.getJwtContentPart(jwt);
     }
