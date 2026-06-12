@@ -33,7 +33,7 @@ abstract class AbstractTestHttpAuthenticationMechanism implements HttpAuthentica
     BlockingSecurityExecutor blockingSecurityExecutor;
 
     protected volatile String authMechanism = null;
-    protected volatile List<SecurityIdentityAugmentor> augmentors = null;
+    protected volatile List<Supplier<? extends SecurityIdentityAugmentor>> augmentors = null;
 
     @PostConstruct
     public void check() {
@@ -55,7 +55,7 @@ abstract class AbstractTestHttpAuthenticationMechanism implements HttpAuthentica
             };
             var requestAttributes = Map.<String, Object> of(ROUTING_CONTEXT_ATTRIBUTE, event);
             for (var augmentor : augmentors) {
-                identity = identity.flatMap(i -> augmentor.augment(i, requestContext, requestAttributes));
+                identity = identity.flatMap(i -> augmentor.get().augment(i, requestContext, requestAttributes));
             }
         }
         return identity;
@@ -81,7 +81,7 @@ abstract class AbstractTestHttpAuthenticationMechanism implements HttpAuthentica
         this.authMechanism = authMechanism;
     }
 
-    void setSecurityIdentityAugmentors(List<SecurityIdentityAugmentor> augmentors) {
+    void setSecurityIdentityAugmentors(List<Supplier<? extends SecurityIdentityAugmentor>> augmentors) {
         this.augmentors = augmentors;
     }
 }

@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import jakarta.json.JsonArray;
@@ -150,8 +151,8 @@ public class OidcTestSecurityIdentityAugmentor implements TestSecurityIdentityAu
     }
 
     @Override
-    public List<SecurityIdentityAugmentor> perRequestAugmentors() {
-        return List.of(new StepUpAuthenticationPolicyAugmentor());
+    public List<Supplier<? extends SecurityIdentityAugmentor>> perRequestAugmentors() {
+        return List.of(StepUpAuthenticationPolicyAugmentor::new);
     }
 
     /**

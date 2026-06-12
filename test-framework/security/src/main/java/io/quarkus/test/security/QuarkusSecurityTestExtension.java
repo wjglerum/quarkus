@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -118,7 +119,7 @@ public class QuarkusSecurityTestExtension implements QuarkusTestBeforeEachCallba
         }
 
         // run SecurityIdentityAugmentors when:
-        List<SecurityIdentityAugmentor> augmentors = new ArrayList<>();
+        List<Supplier<? extends SecurityIdentityAugmentor>> augmentors = new ArrayList<>();
         // 1. user opted-in with @TestSecurity#augmentors, run augmentors listed by user
         for (Class<? extends SecurityIdentityAugmentor> augmentorClass : testSecurity.augmentors()) {
             var augmentorInstance = container.select(augmentorClass);
@@ -129,12 +130,12 @@ public class QuarkusSecurityTestExtension implements QuarkusTestBeforeEachCallba
                         attribute on method '%s' is not available as a CDI bean.
                         """.formatted(augmentorClass, testMethodName));
             }
-            augmentors.add(augmentorInstance.get());
+            augmentors.add(augmentorInstance::get);
         }
         // 2. @PermissionChecker is used, run the augmentor that enables this functionality
         var quarkusPermissionAugmentor = container.select(QuarkusPermissionSecurityIdentityAugmentor.class);
         if (quarkusPermissionAugmentor.isResolvable()) {
-            augmentors.add(quarkusPermissionAugmentor.get());
+            augmentors.add(quarkusPermissionAugmentor::get);
         }
         // 3. the extension-specific TestSecurityIdentityAugmentor provides augmentors, like the OIDC
         // one enforcing the @AuthenticationContext step-up authentication policy

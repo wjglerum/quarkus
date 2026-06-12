@@ -2,6 +2,7 @@ package io.quarkus.test.security;
 
 import java.lang.annotation.Annotation;
 import java.util.List;
+import java.util.function.Supplier;
 
 import io.quarkus.security.identity.SecurityIdentity;
 import io.quarkus.security.identity.SecurityIdentityAugmentor;
@@ -19,7 +20,7 @@ public interface TestSecurityIdentityAugmentor {
      * rather than defined as CDI beans to avoid augmenting identities produced outside of the
      * test authentication mechanism.
      */
-    default List<SecurityIdentityAugmentor> perRequestAugmentors() {
+    default List<Supplier<? extends SecurityIdentityAugmentor>> perRequestAugmentors() {
         return List.of();
     }
 }
